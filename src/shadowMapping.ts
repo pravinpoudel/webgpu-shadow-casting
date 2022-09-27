@@ -18,15 +18,32 @@ let device: GPUDevice,
   boxIndicesBuffer: GPUBuffer,
   shaderBindGroup: GPUBindGroup,
   _shadowPipeline: GPURenderPipeline,
-  _MVBuffer: GPUBuffer,
+  _MBuffer: GPUBuffer,
+  _cameraViewMatrix: GPUBuffer,
   _CProjectionMatrix: GPUBuffer,
-  _LProjectionMatrix: GPUBuffer,
+  _LmvpMatrix: GPUBuffer,
   _dLBuffer: GPUBuffer,
   _colorBuffer: GPUBuffer;
 
-const numInstances: number = 10;
+const xCount: number = 4;
+const yCount: number = 4;
 const lightPosition = [20.0, 100.0, 50.0];
 let cameraPosition = { x: 0, y: 10, z: 10 };
+let eyePosition = vec3.fromValues(
+  cameraPosition.x,
+  cameraPosition.y,
+  cameraPosition.z
+);
+let targetPosition = vec3.fromValues(0, 0, 0);
+
+//orthographic projection dimension
+const left = -40;
+const right = 40;
+const bottom = -40;
+const top = 40;
+const near = -50;
+const far = 200;
+
 const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
   document.getElementById("main-screen")
 );
@@ -35,6 +52,7 @@ async function init(canvas: HTMLCanvasElement) {
   const entry: GPU = <GPU>navigator.gpu;
   if (!entry) {
     console.warn("webgpu is not supported in your browser !!!");
+    throw new Error("webgpu is not supported");
   }
   const adapter: GPUAdapter = <GPUAdapter>await entry.requestAdapter();
   if (!adapter) {
@@ -169,16 +187,28 @@ async function initInstancedBuffer() {
     1000,
     cameraPosition
   );
-
   // we will create and pass whole MVP of light
   let lightViewProjectionMatrix = mat4.create();
-  mat4.ortho(lightViewProjectionMatrix, -40, 40, -40, 40, -50, 200);
+  mat4.ortho(lightViewProjectionMatrix, left, right, bottom, top, near, far); // it does as (40-(-40) in gl-matrix m4.ortho
   let lightViewMatrix = mat4.create();
   mat4.lookAt(
     lightViewMatrix,
     vec3.fromValues(lightPosition[0], lightPosition[1], lightPosition[2]),
-    vec3.fromValues(0, 0, 0),
+    targetPosition,
     vec3.fromValues(0, 1, 0)
+  );
+  mat4.multiply(
+    lightViewProjectionMatrix,
+    lightViewProjectionMatrix,
+    lightViewMatrix
+  );
+
+  const viewMatrix = mat4.create();
+  mat4.lookAt(
+    viewMatrix,
+    eyePosition,
+    targetPosition,
+    vec3.fromValues(0, 0, 0)
   );
 
   _dLBuffer = device.createBuffer({
@@ -190,7 +220,18 @@ async function initInstancedBuffer() {
   var mappedArray = new Float32Array(_dLBuffer.getMappedRange());
   mappedArray.set(lightPosition);
   _dLBuffer.unmap();
-  // check the limit of Uniform
+
+  var _cameraViewMatrix = device.createBuffer({
+    size: 16 * 4,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
+    mappedAtCreation: true,
+  });
+
+  let viewMatrixStagingBuff = new Float32Array(
+    _cameraViewMatrix.getMappedRange()
+  );
+  viewMatrixStagingBuff.set(viewMatrix);
+  _cameraViewMatrix.unmap();
 
   _CProjectionMatrix = device.createBuffer({
     size: 16 * 4,
@@ -199,24 +240,66 @@ async function initInstancedBuffer() {
   });
   var mappedArray = new Float32Array(_CProjectionMatrix.getMappedRange());
   mappedArray.set(cameraProjectionMatrix);
+  _CProjectionMatrix.unmap();
 
-  _LProjectionMatrix = device.createBuffer({
+  _LmvpMatrix = device.createBuffer({
     size: 16 * 4,
     usage: GPUBufferUsage.UNIFORM,
     mappedAtCreation: true,
   });
+  var mappedLightArray = new Float32Array(_LmvpMatrix.getMappedRange());
+  mappedLightArray.set(lightViewProjectionMatrix);
+  _LmvpMatrix.unmap();
 
-  _MVBuffer = device.createBuffer({
+  _MBuffer = device.createBuffer({
+    size: xCount * yCount * 16 * 4,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    size: numInstances * 16,
     mappedAtCreation: true,
   });
+  let mStagedArray = new Float32Array(_MBuffer.getMappedRange());
 
   _colorBuffer = device.createBuffer({
-    size: numInstances * 4 * 4,
+    size: xCount * yCount * 4 * 4,
     usage: GPUBufferUsage.UNIFORM,
     mappedAtCreation: true,
   });
+
+  let colorStagedArray = new Float32Array(_colorBuffer.getMappedRange());
+
+  const modelMatrices = new Array(xCount * yCount);
+  // const modelMatricesData = new Float32Array(xCount * yCount * 16 * 4);
+
+  const colorData = new Array(xCount * yCount);
+  // const colorDataSet = new Float32Array(xCount * yCount * 4);
+
+  {
+    let count = 0;
+    let localPositionReference = { x: 0, y: 0, z: 0 };
+    for (let i = 0; i < xCount; i++) {
+      for (let j = 0; j < yCount; j++) {
+        localPositionReference.x = -7.0 + Math.random() * 20.0;
+        localPositionReference.y = -10 + Math.random() * 25.0;
+        localPositionReference.z = -5 + Math.random() * 20;
+        modelMatrices[count] = mat4.create();
+        mat4.translate(
+          modelMatrices[count],
+          modelMatrices[count],
+          vec3.fromValues(
+            localPositionReference.x,
+            localPositionReference.y,
+            localPositionReference.z
+          )
+        );
+        mStagedArray.set(modelMatrices[count], 16 * count);
+        // modelMatricesData.set(modelMatrices[count], count * 16);
+        colorData[count] = [Math.random(), Math.random(), Math.random()];
+        colorStagedArray.set(colorData[count], count * 4);
+        count++;
+      }
+    }
+  }
+  _MBuffer.unmap();
+  _colorBuffer.unmap();
 }
 
 async function stages() {
