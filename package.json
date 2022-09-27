@@ -16,7 +16,7 @@
     "webpack-cli": "^4.10.0"
   },
   "scripts": {
-    "start": "npm run install-missing-dependencies && npm run build && npm run serve",
+    "start": "npm run build && npm run serve",
     "build": "webpack --config webpack.config.js",
     "serve": "http-server",
     "watch": "webpack --watch --mode production"
@@ -26,6 +26,7 @@
     "url": "git+https://github.com/pravinpoudel/webgpu-shadow-casting.git"
   },
   "devDependencies": {
+    "ts-shader-loader": "^2.0.1",
     "typescript": "^4.8.3"
   },
   "keywords": [],

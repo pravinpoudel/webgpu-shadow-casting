@@ -2,6 +2,7 @@ const path = require("path");
 const loader = require("ts-loader/dist");
 module.exports = {
   entry: "./src/shadowMapping.ts",
+  devtool: "eval-source-map",
   module: {
     rules: [
       {
@@ -17,6 +18,7 @@ module.exports = {
       },
     ],
   },
+  watch: true,
   output: {
     filename: "bundle.js",
     path: path.resolve(__dirname, "dist"), // path need to be absolute path not relativce path so we are using path module

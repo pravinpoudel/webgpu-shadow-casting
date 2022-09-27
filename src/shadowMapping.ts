@@ -6,7 +6,6 @@ import { mat3, mat4 } from "gl-matrix";
 import _shadowVS from "../shaders/shadowV.wgsl";
 import _shadowFS from "../shaders/shadowF.wgsl";
 import _shadowDepth from "../shaders/shadowDepth.wgsl";
-import { pipeline } from "stream";
 
 // const canvas: HTMLCanvasElement;
 let device: GPUDevice,
@@ -34,21 +33,25 @@ async function init(canvas: HTMLCanvasElement) {
     throw new Error("adapter not found");
   }
   device = await adapter.requestDevice();
+
+  if (!device) {
+    console.warn("no device found in the adapter");
+  }
+
   context = <GPUCanvasContext>canvas.getContext("webgpu");
+  console.log(context);
+
   if (!context) {
     return;
   }
 
   // need to find what is this for ??
-  format = navigator.gpu.getPreferredCanvasFormat
-    ? navigator.gpu.getPreferredCanvasFormat()
-    : context.getPreferredFormat(adapter);
-
+  format = navigator.gpu.getPreferredCanvasFormat();
   canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
   canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
   context.configure({
     device: device,
-    format: navigator.gpu.getPreferredCanvasFormat(),
+    format: "bgra8unorm",
   });
   size = { width: canvas.width, height: canvas.height };
 }
@@ -91,7 +94,7 @@ async function initPipeline() {
     code: _shadowVS,
   });
 
-  _shadowPipeline = await device.createRenderPipeline({
+  _shadowPipeline = <GPURenderPipeline>await device.createRenderPipeline({
     label: "light View Depth Pipeline",
     layout: "auto",
     vertex: {
@@ -112,8 +115,9 @@ async function initVertexBuffer() {
     mappedAtCreation: true,
   });
 
-  let stagingData = new Float32Array(sphereVertexBuffer.getMappedRange());
+  var stagingData = new Float32Array(sphereVertexBuffer.getMappedRange());
   stagingData.set(sphere.vertex);
+  sphereVertexBuffer.unmap();
 
   sphereIndicesBuffer = device.createBuffer({
     label: "sphere indices store buffer",
@@ -122,8 +126,9 @@ async function initVertexBuffer() {
     mappedAtCreation: true,
   });
 
-  stagingData = new Float32Array(sphereIndicesBuffer.getMappedRange());
-  stagingData.set(sphere.index);
+  var stagingData2 = new Uint16Array(sphereIndicesBuffer.getMappedRange());
+  stagingData2.set(sphere.index);
+  sphereIndicesBuffer.unmap();
 
   boxVertexBuffer = device.createBuffer({
     label: "box vertex store buffer",
@@ -132,8 +137,9 @@ async function initVertexBuffer() {
     mappedAtCreation: true,
   });
 
-  stagingData = new Float32Array(boxVertexBuffer.getMappedRange());
+  var stagingData = new Float32Array(boxVertexBuffer.getMappedRange());
   stagingData.set(box.vertex);
+  boxVertexBuffer.unmap();
 
   boxIndicesBuffer = device.createBuffer({
     label: "box indices store buffer",
@@ -142,16 +148,23 @@ async function initVertexBuffer() {
     mappedAtCreation: true,
   });
 
-  stagingData = new Float32Array(boxIndicesBuffer.getMappedRange());
-  stagingData.set(box.index);
+  var stagingData2 = new Uint16Array(boxIndicesBuffer.getMappedRange());
+  stagingData2.set(box.index);
+  boxIndicesBuffer.unmap();
 }
 
-async function initStorageBuffer() {}
+async function initShaderBuffer() {}
+async function stages() {
+  await init(screenCanvas);
+  await initPipeline();
+  await initVertexBuffer();
+  await initShaderBuffer();
+}
 
-init(screenCanvas);
-// initPipeline();
-initVertexBuffer();
-initStorageBuffer();
+stages();
+// initShaderBuffer();
+
+//_shadowPipeline.setVertexBuffer(0, sphereVertexBuffer);
 
 //
 // // in sphere there is vertex count as well but that vertex count is number of vertex in that mesh not number of vec3
