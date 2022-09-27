@@ -1,7 +1,7 @@
 import * as sphere from "./utils/sphere";
 import * as box from "./utils/box";
 import { getModelViewMatrix, getProjectionMatrix } from "./utils/math";
-import { mat3, mat4 } from "gl-matrix";
+import { vec3, mat4 } from "gl-matrix";
 
 import _shadowVS from "../shaders/shadowV.wgsl";
 import _shadowFS from "../shaders/shadowF.wgsl";
@@ -17,8 +17,16 @@ let device: GPUDevice,
   boxVertexBuffer: GPUBuffer,
   boxIndicesBuffer: GPUBuffer,
   shaderBindGroup: GPUBindGroup,
-  _shadowPipeline: GPURenderPipeline;
+  _shadowPipeline: GPURenderPipeline,
+  _MVBuffer: GPUBuffer,
+  _CProjectionMatrix: GPUBuffer,
+  _LProjectionMatrix: GPUBuffer,
+  _dLBuffer: GPUBuffer,
+  _colorBuffer: GPUBuffer;
 
+const numInstances: number = 10;
+const lightPosition = [20.0, 100.0, 50.0];
+let cameraPosition = { x: 0, y: 10, z: 10 };
 const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
   document.getElementById("main-screen")
 );
@@ -153,12 +161,69 @@ async function initVertexBuffer() {
   boxIndicesBuffer.unmap();
 }
 
-async function initShaderBuffer() {}
+async function initInstancedBuffer() {
+  let cameraProjectionMatrix = getProjectionMatrix(
+    screenCanvas.width / screenCanvas.height,
+    0.5 * Math.PI,
+    0.1,
+    1000,
+    cameraPosition
+  );
+
+  // we will create and pass whole MVP of light
+  let lightViewProjectionMatrix = mat4.create();
+  mat4.ortho(lightViewProjectionMatrix, -40, 40, -40, 40, -50, 200);
+  let lightViewMatrix = mat4.create();
+  mat4.lookAt(
+    lightViewMatrix,
+    vec3.fromValues(lightPosition[0], lightPosition[1], lightPosition[2]),
+    vec3.fromValues(0, 0, 0),
+    vec3.fromValues(0, 1, 0)
+  );
+
+  _dLBuffer = device.createBuffer({
+    size: 3 * 4,
+    usage: GPUBufferUsage.UNIFORM,
+    mappedAtCreation: true,
+  });
+
+  var mappedArray = new Float32Array(_dLBuffer.getMappedRange());
+  mappedArray.set(lightPosition);
+  _dLBuffer.unmap();
+  // check the limit of Uniform
+
+  _CProjectionMatrix = device.createBuffer({
+    size: 16 * 4,
+    usage: GPUBufferUsage.UNIFORM,
+    mappedAtCreation: true,
+  });
+  var mappedArray = new Float32Array(_CProjectionMatrix.getMappedRange());
+  mappedArray.set(cameraProjectionMatrix);
+
+  _LProjectionMatrix = device.createBuffer({
+    size: 16 * 4,
+    usage: GPUBufferUsage.UNIFORM,
+    mappedAtCreation: true,
+  });
+
+  _MVBuffer = device.createBuffer({
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    size: numInstances * 16,
+    mappedAtCreation: true,
+  });
+
+  _colorBuffer = device.createBuffer({
+    size: numInstances * 4 * 4,
+    usage: GPUBufferUsage.UNIFORM,
+    mappedAtCreation: true,
+  });
+}
+
 async function stages() {
   await init(screenCanvas);
   await initPipeline();
   await initVertexBuffer();
-  await initShaderBuffer();
+  await initInstancedBuffer();
 }
 
 stages();
