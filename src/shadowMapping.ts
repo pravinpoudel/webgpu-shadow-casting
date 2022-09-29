@@ -6,6 +6,7 @@ import { vec3, mat4 } from "gl-matrix";
 import _shadowVS from "../shaders/shadowV.wgsl";
 import _shadowFS from "../shaders/shadowF.wgsl";
 import _shadowDepth from "../shaders/shadowDepth.wgsl";
+import { fragment } from "./wgsl";
 
 // const canvas: HTMLCanvasElement;
 let device: GPUDevice,
@@ -18,11 +19,18 @@ let device: GPUDevice,
   boxIndicesBuffer: GPUBuffer,
   shaderBindGroup: GPUBindGroup,
   _shadowPipeline: GPURenderPipeline,
+  _renderingPipeline: GPURenderPipeline,
   _MVBuffer: GPUBuffer,
   _CProjectionMatrix: GPUBuffer,
   _LProjectionMatrix: GPUBuffer,
   _dLBuffer: GPUBuffer,
-  _colorBuffer: GPUBuffer;
+  _colorBuffer: GPUBuffer,
+  _shaderPipelineDesc_Primitive: any,
+  _shaderPipelineDesc_depth: any,
+  shadowDepthTexture: GPUTexture,
+  renderDepthTexture: GPUTexture,
+  shadowPassDescriptor: GPURenderPassDescriptor,
+  renderpassDescriptor: GPURenderPassDescriptor;
 
 const numInstances: number = 10;
 const lightPosition = [20.0, 100.0, 50.0];
@@ -64,7 +72,7 @@ async function init(canvas: HTMLCanvasElement) {
   size = { width: canvas.width, height: canvas.height };
 }
 
-async function initPipeline() {
+async function initShadowPipeline() {
   const _shaderPipelineDesc_VB = [
     {
       arrayStride: 8 * 4, // 3(position) + 3(normal) + 2(uv)
@@ -88,12 +96,12 @@ async function initPipeline() {
     },
   ];
 
-  const _shaderPipelineDesc_Primitive = {
+  _shaderPipelineDesc_Primitive = {
     topology: "triangle-list",
     cullMode: "back",
   };
 
-  const _shaderPipelineDesc_depth = {
+  _shaderPipelineDesc_depth = {
     depthWriteEnabled: true,
     depthCompare: "less",
     format: "depth32float",
@@ -197,6 +205,7 @@ async function initInstancedBuffer() {
     usage: GPUBufferUsage.UNIFORM,
     mappedAtCreation: true,
   });
+
   var mappedArray = new Float32Array(_CProjectionMatrix.getMappedRange());
   mappedArray.set(cameraProjectionMatrix);
 
@@ -219,14 +228,117 @@ async function initInstancedBuffer() {
   });
 }
 
-async function stages() {
-  await init(screenCanvas);
-  await initPipeline();
-  await initVertexBuffer();
-  await initInstancedBuffer();
+async function initRenderingPipeline() {
+  const vertexModule = device.createShaderModule({ code: _shadowVS });
+  const fragmentModule = device.createShaderModule({ code: _shadowFS });
+
+  const _shaderVertexDesc = {
+    module: vertexModule,
+    entryPoint: "main",
+    buffer: [
+      {
+        arrayStride: 8 * 4,
+        attributes: [
+          {
+            shaderLocation: 0,
+            offset: 0,
+            format: "float32x3",
+          },
+          {
+            shaderLocation: 1,
+            offset: 3 * 4,
+            format: "float32x3",
+          },
+          {
+            shaderLocation: 2,
+            offset: 6 * 4,
+            format: "float32x2",
+          },
+        ],
+      },
+    ] as Iterable<GPUVertexBufferLayout>,
+  };
+  const _shaderFragmentDesc = {
+    module: fragmentModule,
+    entryPoint: "main",
+    targets: [
+      {
+        format: format,
+      },
+    ],
+  };
+
+  _renderingPipeline = await device.createRenderPipeline({
+    label: "render pipeline",
+    layout: "auto",
+    vertex: _shaderVertexDesc,
+    fragment: _shaderFragmentDesc,
+    primitive: _shaderPipelineDesc_Primitive,
+    depthStencil: _shaderPipelineDesc_depth,
+  });
 }
 
-stages();
+async function stages() {
+  await init(screenCanvas);
+  await initShadowPipeline();
+  await initVertexBuffer();
+  await initInstancedBuffer();
+  await initRenderingPipeline();
+  createTextureandRenDesc();
+}
+
+function createTextureandRenDesc() {
+  shadowDepthTexture = device.createTexture({
+    size: [screenCanvas.width, screenCanvas.height, 1],
+    format: "depth32float",
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  renderDepthTexture = device.createTexture({
+    size: [screenCanvas.width, screenCanvas.height, 1],
+    format: "depth32float",
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  shadowPassDescriptor = {
+    colorAttachments: [],
+    depthStencilAttachment: {
+      view: shadowDepthTexture.createView(),
+      depthClearValue: 1.0,
+      depthLoadOp: "clear",
+      depthStoreOp: "store",
+    },
+  } as { depthStencilAttachment: any; colorAttachments: any };
+
+  renderpassDescriptor = {
+    colorAttachments: [
+      {
+        view: undefined,
+        loadOp: "clear",
+        storeOp: "store",
+      },
+    ],
+    depthStencilAttachment: {
+      view: renderDepthTexture.createView(),
+      depthLoadOp: "clear",
+      depthStoreOp: "store",
+    },
+  } as { depthStencilAttachment: any; colorAttachments: any };
+}
+
+await stages();
+
+function render() {
+  const depthEncoder = device.createCommandEncoder();
+  renderpassDescriptor.colorAttachments[0].view = context
+    .getCurrentTexture()
+    .createView();
+
+  depthEncoder.beginRenderPass(renderpassDescriptor);
+  requestAnimationFrame(render);
+}
+
+render();
 // initShaderBuffer();
 
 //_shadowPipeline.setVertexBuffer(0, sphereVertexBuffer);
