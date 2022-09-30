@@ -18,17 +18,22 @@ let device: GPUDevice,
   boxIndicesBuffer: GPUBuffer,
   _shadowPipeline: GPURenderPipeline,
   _renderingPipeline: GPURenderPipeline,
-  _MVBuffer: GPUBuffer,
-  _CProjectionMatrix: GPUBuffer,
-  _LProjectionMatrix: GPUBuffer,
+  _MBuffer: GPUBuffer,
+  _LViewBuffer: GPUBuffer,
+  _LProjectionBuffer: GPUBuffer,
+  _CViewBuffer: GPUBuffer,
+  _CProjectionBuffer: GPUBuffer,
   _dLBuffer: GPUBuffer,
   _colorBuffer: GPUBuffer,
   _shaderPipelineDesc_Primitive: any,
   _shaderPipelineDesc_depth: any,
   shadowDepthTexture: GPUTexture,
   renderDepthTexture: GPUTexture,
-  shadowPassDescriptor: GPURenderPassDescriptor,
-  renderpassDescriptor: GPURenderPassDescriptor;
+  shadowPassDescriptor: { depthStencilAttachment: any; colorAttachments: any },
+  renderpassDescriptor: { depthStencilAttachment: any; colorAttachments: any },
+  _shaderPipelineDesc_VB: any,
+  shadowBindGroup: GPUBindGroup,
+  renderBindGroup: GPUBindGroup;
 
 const xCount: number = 4;
 const yCount: number = 4;
@@ -57,7 +62,6 @@ async function init(canvas: HTMLCanvasElement) {
   const entry: GPU = <GPU>navigator.gpu;
   if (!entry) {
     console.warn("webgpu is not supported in your browser !!!");
-    throw new Error("webgpu is not supported");
   }
   const adapter: GPUAdapter = <GPUAdapter>await entry.requestAdapter();
   if (!adapter) {
@@ -89,8 +93,20 @@ async function init(canvas: HTMLCanvasElement) {
   await stages();
 }
 
+async function stages() {
+  await init(screenCanvas);
+  await initShadowPipeline();
+  await initVertexBuffer();
+  await rBufferInit();
+  await sBufferInit();
+  await initInstancedBuffer();
+  await initRenderingPipeline();
+  createDepthTexture();
+  createRenderPassDescriptor();
+}
+
 async function initShadowPipeline() {
-  const _shaderPipelineDesc_VB = [
+  _shaderPipelineDesc_VB = [
     {
       arrayStride: 8 * 4, // 3(position) + 3(normal) + 2(uv)
       attributes: [
@@ -228,15 +244,12 @@ async function rBufferInit() {
     cameraPosition
   );
 
-  // we will create and pass whole MVP of light
-  let lightViewProjectionMatrix = mat4.create();
-  mat4.ortho(lightViewProjectionMatrix, left, right, bottom, top, near, far); // it does as (40-(-40) in gl-matrix m4.ortho
-  let lightViewMatrix = mat4.create();
+  const viewMatrix = mat4.create();
   mat4.lookAt(
-    lightViewMatrix,
-    vec3.fromValues(lightPosition[0], lightPosition[1], lightPosition[2]),
+    viewMatrix,
+    eyePosition,
     targetPosition,
-    vec3.fromValues(0, 1, 0)
+    vec3.fromValues(0, 0, 0)
   );
 
   _CViewBuffer = device.createBuffer({
@@ -357,7 +370,7 @@ function createBindGroup() {
     {
       binding: 3
     }, {
-
+      
     }
   });
 }
