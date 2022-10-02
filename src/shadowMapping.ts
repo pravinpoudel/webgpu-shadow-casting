@@ -19,10 +19,9 @@ let device: GPUDevice,
   _shadowPipeline: GPURenderPipeline,
   _renderingPipeline: GPURenderPipeline,
   _MBuffer: GPUBuffer,
-  _LViewBuffer: GPUBuffer,
   _LProjectionBuffer: GPUBuffer,
-  _CViewBuffer: GPUBuffer,
-  _CProjectionBuffer: GPUBuffer,
+  _CViewProjectionBuffer: GPUBuffer,
+  // _CProjectionBuffer: GPUBuffer,
   _dLBuffer: GPUBuffer,
   _colorBuffer: GPUBuffer,
   _shaderPipelineDesc_Primitive: any,
@@ -33,7 +32,8 @@ let device: GPUDevice,
   renderpassDescriptor: { depthStencilAttachment: any; colorAttachments: any },
   _shaderPipelineDesc_VB: any,
   shadowBindGroup: GPUBindGroup,
-  renderBindGroup: GPUBindGroup;
+  renderBindGroup0: GPUBindGroup,
+  renderBindGroup1: GPUBindGroup;
 
 const xCount: number = 4;
 const yCount: number = 4;
@@ -203,9 +203,17 @@ async function initVertexBuffer() {
 }
 
 async function sBufferInit() {
-  // light P
-  let lightViewProjectionMatrix = mat4.create();
-  mat4.ortho(lightViewProjectionMatrix, left, right, bottom, top, near, far); // it does as (40-(-40) in gl-matrix m4.ortho
+  
+  let lightViewMatrix = mat4.create();
+  mat4.lookAt(
+    lightViewMatrix,
+    vec3.fromValues(lightPosition[0], lightPosition[1], lightPosition[2]),
+    targetPosition,
+    vec3.fromValues(0, 1, 0)
+  );
+   let lightViewProjectionMatrix = mat4.create();
+  mat4.ortho(lightViewProjectionMatrix, left, right, bottom, top, near, far);
+  mat4.multiply(lightViewProjectionMatrix, lightViewProjectionMatrix, lightViewMatrix);
 
   _LProjectionBuffer = device.createBuffer({
     size: 16 * 4,
@@ -216,63 +224,7 @@ async function sBufferInit() {
   mappedLightArray.set(lightViewProjectionMatrix);
   _LProjectionBuffer.unmap();
 
-  //light V
-  let lightViewMatrix = mat4.create();
-  mat4.lookAt(
-    lightViewMatrix,
-    vec3.fromValues(lightPosition[0], lightPosition[1], lightPosition[2]),
-    targetPosition,
-    vec3.fromValues(0, 1, 0)
-  );
-
-  _LViewBuffer = device.createBuffer({
-    size: 16 * 4,
-    usage: GPUBufferUsage.UNIFORM,
-    mappedAtCreation: true,
-  });
-  var mappedLightArray = new Float32Array(_LViewBuffer.getMappedRange());
-  mappedLightArray.set(lightViewMatrix);
-  _LViewBuffer.unmap();
-}
-
-async function rBufferInit() {
-  let cameraProjectionMatrix = getProjectionMatrix(
-    screenCanvas.width / screenCanvas.height,
-    0.5 * Math.PI,
-    0.1,
-    1000,
-    cameraPosition
-  );
-
-  const viewMatrix = mat4.create();
-  mat4.lookAt(
-    viewMatrix,
-    eyePosition,
-    targetPosition,
-    vec3.fromValues(0, 0, 0)
-  );
-
-  _CViewBuffer = device.createBuffer({
-    size: 16 * 4,
-    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
-    mappedAtCreation: true,
-  });
-  let viewMatrixStagingBuff = new Float32Array(_CViewBuffer.getMappedRange());
-  viewMatrixStagingBuff.set(viewMatrix);
-  _CViewBuffer.unmap();
-
-  _CProjectionBuffer = device.createBuffer({
-    size: 16 * 4,
-    usage: GPUBufferUsage.UNIFORM,
-    mappedAtCreation: true,
-  });
-  var mappedArray = new Float32Array(_CProjectionBuffer.getMappedRange());
-  mappedArray.set(cameraProjectionMatrix);
-  _CProjectionBuffer.unmap();
-}
-
-async function initInstancedBuffer() {
-  _dLBuffer = device.createBuffer({
+   _dLBuffer = device.createBuffer({
     size: 3 * 4,
     usage: GPUBufferUsage.UNIFORM,
     mappedAtCreation: true,
@@ -281,6 +233,51 @@ async function initInstancedBuffer() {
   var mappedArray = new Float32Array(_dLBuffer.getMappedRange());
   mappedArray.set(lightPosition);
   _dLBuffer.unmap();
+
+}
+
+async function rBufferInit() {
+  
+  const viewMatrix = mat4.create();
+  mat4.lookAt(
+    viewMatrix,
+    eyePosition,
+    targetPosition,
+    vec3.fromValues(0, 0, 0)
+  );
+
+  let cameraProjectionMatrix = getProjectionMatrix(
+    screenCanvas.width / screenCanvas.height,
+    0.5 * Math.PI,
+    0.1,
+    1000,
+    cameraPosition
+  );
+
+  const cameraViewProjectionMatrix = mat4.create();
+  mat4.multiply(cameraViewProjectionMatrix, viewMatrix, cameraProjectionMatrix);
+  
+  _CViewProjectionBuffer = device.createBuffer({
+    size: 16 * 4,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.UNIFORM,
+    mappedAtCreation: true,
+  });
+
+  let viewMatrixStagingBuff = new Float32Array(_CViewProjectionBuffer.getMappedRange());
+  viewMatrixStagingBuff.set(viewMatrix);
+  _CViewProjectionBuffer.unmap();
+
+  // _CProjectionBuffer = device.createBuffer({
+  //   size: 16 * 4,
+  //   usage: GPUBufferUsage.UNIFORM,
+  //   mappedAtCreation: true,
+  // });
+  // var mappedArray = new Float32Array(_CProjectionBuffer.getMappedRange());
+  // mappedArray.set(cameraProjectionMatrix);
+  // _CProjectionBuffer.unmap();
+}
+
+async function initInstancedBuffer() {
 
   _MBuffer = device.createBuffer({
     size: xCount * yCount * 16 * 4,
@@ -341,38 +338,65 @@ function createBindGroup() {
       {
         binding: 0,
         resource: {
-          buffer: _LViewBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
           buffer: _LProjectionBuffer,
         },
-      },
+      }
     ],
   });
 
-  renderBindGroup = device.createBindGroup({
-    label: "render shaderpass bind group",
+  renderBindGroup0 = device.createBindGroup({
+    label: "render shaderpass bind group 0",
     layout: _renderingPipeline.getBindGroupLayout(0),
     entries: [
-      {
-        binding: 0
+    {
+      binding: 0,
+      resource: {
+        buffer:_MBuffer
       }
-    ],
-    {
-      binding: 1
     },
     {
-      binding: 2
+      binding: 1,
+      resource:{
+        buffer: _colorBuffer        
+      }
     },
     {
-      binding: 3
-    }, {
-      
+      binding: 2,
+      resource: {
+          buffer: _LProjectionBuffer
+        }
+    }, 
+    {
+      binding: 3,
+      resource:{
+        buffer:_CViewProjectionBuffer
+      }
+    }, 
+    {
+      binding: 4, 
+      resource: {
+        buffer: _dLBuffer
+      }
     }
-  });
+  ]
+});
+
+  renderBindGroup1 = device.createBindGroup({
+    label: "render shaderpass bind group 1",
+    layout: _renderingPipeline.getBindGroupLayout(1),
+    entries: [
+    { 
+      binding: 0,
+      resource: device.createSampler({
+          compare: "less"
+        })
+    },
+    {
+      binding: 1,
+      resource: shadowDepthTexture.createView()
+    }, 
+    ]
+  })
 }
 
 async function initRenderingPipeline() {
@@ -467,7 +491,8 @@ function render() {
 
   const renderingPass = depthEncoder.beginRenderPass(renderpassDescriptor);
   renderingPass.setPipeline(_renderingPipeline);
-  renderingPass.setBindGroup(0, renderBindGroup);
+  renderingPass.setBindGroup(0, renderBindGroup0);
+  renderingPass.setBindGroup(1, renderBindGroup1);
   drawMultipleInstances(renderingPass);
   renderingPass.end();
   requestAnimationFrame(render);
