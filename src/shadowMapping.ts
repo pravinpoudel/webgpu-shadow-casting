@@ -102,7 +102,8 @@ async function stages() {
     await initInstancedBuffer();
     await initRenderingPipeline();
     createDepthTexture();
-    createRenderPassDescriptor();    
+    createRenderPassDescriptor();  
+    _createBindGroup()  
 }
 
 await stages();
@@ -332,7 +333,7 @@ async function initInstancedBuffer() {
   _colorBuffer.unmap();
 }
 
-function createBindGroup() {
+function _createBindGroup() {
   shadowBindGroup = device.createBindGroup({
     label: "show mapping bind group",
     layout: _shadowPipeline.getBindGroupLayout(0),
@@ -346,6 +347,7 @@ function createBindGroup() {
     ],
     });
   
+  console.log(shadowBindGroup)
   renderBindGroup0 = device.createBindGroup({
     label: "render shaderpass bind group 0",
     layout: _renderingPipeline.getBindGroupLayout(0),
