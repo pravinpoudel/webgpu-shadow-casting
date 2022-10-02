@@ -58,6 +58,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
   document.getElementById("main-screen")
 );
 
+(async ()=>{
 async function init(canvas: HTMLCanvasElement) {
   const entry: GPU = <GPU>navigator.gpu;
   if (!entry) {
@@ -90,20 +91,21 @@ async function init(canvas: HTMLCanvasElement) {
   });
   size = { width: canvas.width, height: canvas.height };
 
-  await stages();
 }
 
 async function stages() {
-  await init(screenCanvas);
-  await initShadowPipeline();
-  await initVertexBuffer();
-  await rBufferInit();
-  await sBufferInit();
-  await initInstancedBuffer();
-  await initRenderingPipeline();
-  createDepthTexture();
-  createRenderPassDescriptor();
+    await init(screenCanvas);
+    await initShadowPipeline();
+    await initVertexBuffer();
+    await rBufferInit();
+    await sBufferInit();
+    await initInstancedBuffer();
+    await initRenderingPipeline();
+    createDepthTexture();
+    createRenderPassDescriptor();    
 }
+
+await stages();
 
 async function initShadowPipeline() {
   _shaderPipelineDesc_VB = [
@@ -342,8 +344,8 @@ function createBindGroup() {
         },
       }
     ],
-  });
-
+    });
+  
   renderBindGroup0 = device.createBindGroup({
     label: "render shaderpass bind group 0",
     layout: _renderingPipeline.getBindGroupLayout(0),
@@ -378,8 +380,8 @@ function createBindGroup() {
         buffer: _dLBuffer
       }
     }
-  ]
-});
+    ]
+  });
 
   renderBindGroup1 = device.createBindGroup({
     label: "render shaderpass bind group 1",
@@ -617,3 +619,5 @@ render();
 // device.queue.writeBuffer(sphereBuffer.indices, 0, sphereBuffer.indices);
 // device.queue.writeBuffer(boxBuffer.vertex, 0, boxBuffer.vertex);
 // device.queue.writeBuffer(boxBuffer.indices, 0, boxBuffer.indices);
+
+})();
