@@ -41,7 +41,7 @@ let device: GPUDevice,
 const xCount: number = 4;
 const yCount: number = 4;
 const lightPosition = [20.0, 100.0, 50.0];
-let cameraPosition = { x: 0, y: 10, z: 10 };
+let cameraPosition = { x: 0, y: 10, z: 40 };
 let eyePosition = vec3.fromValues(
   cameraPosition.x,
   cameraPosition.y,
@@ -167,11 +167,10 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
         entryPoint: "main",
         buffers: _shaderPipelineDesc_VB,
       } as GPUVertexState,
-      fragment: _shaderFragmentDesc1,
+      // fragment: _shaderFragmentDesc1,
       primitive: _shaderPipelineDesc_Primitive as GPUPrimitiveState,
       depthStencil: _shaderPipelineDesc_depth as GPUDepthStencilState,
     })) as GPURenderPipeline;
-    console.log(_shadowPipeline.getBindGroupLayout(0));
   }
 
   async function initVertexBuffer() {
@@ -270,9 +269,9 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     //   targetPosition,
     //   vec3.fromValues(0, 0, 0)
     // );
-
+    let aspect = screenCanvas.width / screenCanvas.height;
     let cameraProjectionMatrix = getProjectionMatrix(
-      screenCanvas.width / screenCanvas.height,
+      aspect,
       0.5 * Math.PI,
       0.1,
       1000,
@@ -408,12 +407,6 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
             buffer: _CViewProjectionBuffer,
           },
         },
-        {
-          binding: 4,
-          resource: {
-            buffer: _dLBuffer,
-          },
-        },
       ],
     });
 
@@ -430,6 +423,12 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
         {
           binding: 1,
           resource: shadowDepthTexture.createView(),
+        },
+        {
+          binding: 2,
+          resource: {
+            buffer: _dLBuffer,
+          },
         },
       ],
     });
@@ -479,14 +478,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
 
   function createRenderPassDescriptor() {
     shadowPassDescriptor = {
-      colorAttachments: [
-        {
-          view: null,
-          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
-          loadOp: "clear",
-          storeOp: "store",
-        },
-      ],
+      colorAttachments: [],
       depthStencilAttachment: {
         view: shadowDepthTexture.createView(),
         depthClearValue: 1.0,
@@ -499,13 +491,14 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
       colorAttachments: [
         {
           view: null,
-          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+          clearValue: { r: 0.8, g: 0.8, b: 0.8, a: 1.0 },
           loadOp: "clear",
           storeOp: "store",
         },
       ],
       depthStencilAttachment: {
         view: renderDepthTexture.createView(),
+        depthClearValue: 1.0,
         depthLoadOp: "clear",
         depthStoreOp: "store",
       },
@@ -524,7 +517,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
 
   function render() {
     const depthEncoder = device.createCommandEncoder();
-    shadowPassDescriptor.colorAttachments[0].view = context
+    renderpassDescriptor.colorAttachments[0].view = context
       .getCurrentTexture()
       .createView();
 
@@ -534,12 +527,13 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     drawMultipleInstances(depthRenderPass);
     depthRenderPass.end();
 
-    // const renderingPass = depthEncoder.beginRenderPass(renderpassDescriptor);
-    // renderingPass.setPipeline(_renderingPipeline);
-    // renderingPass.setBindGroup(0, renderBindGroup0);
-    // renderingPass.setBindGroup(1, renderBindGroup1);
-    // drawMultipleInstances(renderingPass);
-    // renderingPass.end();
+    const renderingPass = depthEncoder.beginRenderPass(renderpassDescriptor);
+    renderingPass.setPipeline(_renderingPipeline);
+    renderingPass.setBindGroup(0, renderBindGroup0);
+    renderingPass.setBindGroup(1, renderBindGroup1);
+    drawMultipleInstances(renderingPass);
+    renderingPass.end();
+
     const commands = depthEncoder.finish();
     device.queue.submit([commands]);
     requestAnimationFrame(render);

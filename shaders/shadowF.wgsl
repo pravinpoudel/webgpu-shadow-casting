@@ -4,9 +4,10 @@ struct shaderIn{
  @location(2) fragNormal:vec3<f32>
 }
 
-@group(0) @binding(4) var<uniform> lightposition: vec3<f32>;
+
 @group(1) @binding(0) var comparisionSampler:sampler_comparison;
 @group(1) @binding(1) var d_texture:texture_depth_2d;
+@group(1) @binding(2) var<uniform> lightposition: vec3<f32>;
 
 @fragment
 fn main(in1:shaderIn)->@location(0) vec4<f32>{
@@ -26,6 +27,6 @@ fn main(in1:shaderIn)->@location(0) vec4<f32>{
     }
     shadow = shadow/9.0; 
     var effectiveDiffuse:f32 = diffuseCofficient*shadow;
-    var lighting:vec4<f32> = vec4(ambient, 1.0)*in1.color;
-    return vec4(1.0, 0.0, 0.0, 1.0);
+    var lighting:vec4<f32> = vec4(ambient, 1.0)*effectiveDiffuse*in1.color;
+    return vec4<f32>(0.2, 0.2, 0.0, 1.0);
 }
