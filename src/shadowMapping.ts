@@ -40,8 +40,8 @@ let device: GPUDevice,
 
 const xCount: number = 4;
 const yCount: number = 4;
-const lightPosition = [20.0, 100.0, 50.0];
-let cameraPosition = { x: 0, y: 10, z: 40 };
+const lightPosition = [0.0, 100.0, 0.0];
+let cameraPosition = { x: 50, y: 30, z: 20 };
 let eyePosition = vec3.fromValues(
   cameraPosition.x,
   cameraPosition.y,
@@ -177,8 +177,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     sphereVertexBuffer = device.createBuffer({
       label: "sphere vertex store buffer",
       size: sphere.vertex.byteLength,
-      usage:
-        GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
 
@@ -189,8 +188,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     sphereIndicesBuffer = device.createBuffer({
       label: "sphere indices store buffer",
       size: sphere.index.byteLength,
-      usage:
-        GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
+      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
 
@@ -201,8 +199,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     boxVertexBuffer = device.createBuffer({
       label: "box vertex store buffer",
       size: box.vertex.byteLength,
-      usage:
-        GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
       mappedAtCreation: true,
     });
 
@@ -213,8 +210,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     boxIndicesBuffer = device.createBuffer({
       label: "box indices store buffer",
       size: box.index.byteLength,
-      usage:
-        GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX,
+      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
 
@@ -334,6 +330,18 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
       let localPositionReference = { x: 0, y: 0, z: 0 };
       for (let i = 0; i < xCount; i++) {
         for (let j = 0; j < yCount; j++) {
+          if (i * xCount + j == xCount * yCount - 1.0) {
+            const position = { x: 0, y: -10, z: -20 };
+            const rotation = { x: 0, y: 0, z: 0 };
+            const scale = { x: 50, y: 0.5, z: 40 };
+            const modelView = getModelViewMatrix(position, rotation, scale);
+            mStagedArray.set(modelView, 16 * count);
+            // modelMatricesData.set(modelMatrices[count], count * 16);
+            colorData[count] = [1.0, 1.0, 1.0, 1.0];
+            colorStagedArray.set(colorData[count], count * 4);
+            count++;
+            continue;
+          }
           localPositionReference.x = -7.0 + Math.random() * 20.0;
           localPositionReference.y = -10 + Math.random() * 25.0;
           localPositionReference.z = -5 + Math.random() * 20;
@@ -349,7 +357,12 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
           );
           mStagedArray.set(modelMatrices[count], 16 * count);
           // modelMatricesData.set(modelMatrices[count], count * 16);
-          colorData[count] = [Math.random(), Math.random(), Math.random()];
+          colorData[count] = [
+            Math.random(),
+            Math.random(),
+            Math.random(),
+            Math.random(),
+          ];
           colorStagedArray.set(colorData[count], count * 4);
           count++;
         }
@@ -491,7 +504,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
       colorAttachments: [
         {
           view: null,
-          clearValue: { r: 0.8, g: 0.8, b: 0.8, a: 1.0 },
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
           loadOp: "clear",
           storeOp: "store",
         },
@@ -508,11 +521,17 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
   function drawMultipleInstances(pass: any) {
     pass.setVertexBuffer(0, sphereVertexBuffer);
     pass.setIndexBuffer(sphereIndicesBuffer, "uint16");
-    pass.drawIndexed(sphere.indexCount, (xCount * yCount) / 2);
+    pass.drawIndexed(sphere.indexCount, (xCount * yCount) / 2, 0, 0, 0);
 
     pass.setVertexBuffer(0, boxVertexBuffer);
     pass.setIndexBuffer(boxIndicesBuffer, "uint16");
-    pass.drawIndexed(box.indexCount, (xCount * yCount) / 2);
+    pass.drawIndexed(
+      box.indexCount,
+      xCount * yCount,
+      0,
+      0,
+      (xCount * yCount) / 2.0
+    );
   }
 
   function render() {
