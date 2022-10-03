@@ -27,5 +27,5 @@ fn main(in1:shaderIn)->@location(0) vec4<f32>{
     shadow = shadow/9.0; 
     var effectiveDiffuse:f32 = diffuseCofficient*shadow;
     var lighting:vec4<f32> = vec4(ambient, 1.0)*in1.color;
-    return vec4(1.0, 1.0, 0.0, 1.0);
+    return vec4(1.0, 0.0, 0.0, 1.0);
 }
