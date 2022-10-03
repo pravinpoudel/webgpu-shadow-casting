@@ -6,6 +6,9 @@ import { vec3, mat4 } from "gl-matrix";
 import _shadowVS from "../shaders/shadowV.wgsl";
 import _shadowFS from "../shaders/shadowF.wgsl";
 import _shadowDepth from "../shaders/shadowDepth.wgsl";
+import _shadowMapFrag from "../shaders/shadowDepthF.wgsl";
+
+import "./style/style.css";
 
 // const canvas: HTMLCanvasElement;
 let device: GPUDevice,
@@ -144,6 +147,17 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     const _vsShaderModule = device.createShaderModule({
       code: _shadowDepth,
     });
+    const fragmentModule = device.createShaderModule({ code: _shadowMapFrag });
+
+    const _shaderFragmentDesc1 = {
+      module: fragmentModule,
+      entryPoint: "main",
+      targets: [
+        {
+          format: format,
+        },
+      ],
+    };
 
     _shadowPipeline = (await device.createRenderPipeline({
       label: "light View Depth Pipeline",
@@ -153,9 +167,11 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
         entryPoint: "main",
         buffers: _shaderPipelineDesc_VB,
       } as GPUVertexState,
+      fragment: _shaderFragmentDesc1,
       primitive: _shaderPipelineDesc_Primitive as GPUPrimitiveState,
       depthStencil: _shaderPipelineDesc_depth as GPUDepthStencilState,
     })) as GPURenderPipeline;
+    console.log(_shadowPipeline.getBindGroupLayout(0));
   }
 
   async function initVertexBuffer() {
@@ -226,7 +242,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
 
     _LProjectionBuffer = device.createBuffer({
       size: 16 * 4,
-      usage: GPUBufferUsage.UNIFORM,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       mappedAtCreation: true,
     });
     var mappedLightArray = new Float32Array(
@@ -334,11 +350,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
           );
           mStagedArray.set(modelMatrices[count], 16 * count);
           // modelMatricesData.set(modelMatrices[count], count * 16);
-          colorData[count] = [
-            255.0 * Math.random(),
-            255.0 * Math.random(),
-            255.0 * Math.random(),
-          ];
+          colorData[count] = [Math.random(), Math.random(), Math.random()];
           colorStagedArray.set(colorData[count], count * 4);
           count++;
         }
@@ -467,7 +479,14 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
 
   function createRenderPassDescriptor() {
     shadowPassDescriptor = {
-      colorAttachments: [],
+      colorAttachments: [
+        {
+          view: null,
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
+          loadOp: "clear",
+          storeOp: "store",
+        },
+      ],
       depthStencilAttachment: {
         view: shadowDepthTexture.createView(),
         depthClearValue: 1.0,
@@ -479,7 +498,8 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     renderpassDescriptor = {
       colorAttachments: [
         {
-          view: undefined,
+          view: null,
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 1.0 },
           loadOp: "clear",
           storeOp: "store",
         },
@@ -504,7 +524,7 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
 
   function render() {
     const depthEncoder = device.createCommandEncoder();
-    renderpassDescriptor.colorAttachments[0].view = context
+    shadowPassDescriptor.colorAttachments[0].view = context
       .getCurrentTexture()
       .createView();
 
@@ -514,12 +534,12 @@ const screenCanvas: HTMLCanvasElement = <HTMLCanvasElement>(
     drawMultipleInstances(depthRenderPass);
     depthRenderPass.end();
 
-    const renderingPass = depthEncoder.beginRenderPass(renderpassDescriptor);
-    renderingPass.setPipeline(_renderingPipeline);
-    renderingPass.setBindGroup(0, renderBindGroup0);
-    renderingPass.setBindGroup(1, renderBindGroup1);
-    drawMultipleInstances(renderingPass);
-    renderingPass.end();
+    // const renderingPass = depthEncoder.beginRenderPass(renderpassDescriptor);
+    // renderingPass.setPipeline(_renderingPipeline);
+    // renderingPass.setBindGroup(0, renderBindGroup0);
+    // renderingPass.setBindGroup(1, renderBindGroup1);
+    // drawMultipleInstances(renderingPass);
+    // renderingPass.end();
     const commands = depthEncoder.finish();
     device.queue.submit([commands]);
     requestAnimationFrame(render);
